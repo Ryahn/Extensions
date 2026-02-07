@@ -373,6 +373,10 @@ enum HTTP_METHOD: string {
 	/**
 	 * Send a manual test request using configuration data.
 	 *
+	 * @throws InvalidArgumentException
+	 * @throws JsonException
+	 * @throws RuntimeException
+	 *
 	 * @param array{
 	 *   keywords: list<string>,
 	 *   match_mode: 'basic'|'advanced',
@@ -433,7 +437,7 @@ enum HTTP_METHOD: string {
 	private function sendTestRequestSafely(array $config): void {
 		try {
 			$this->sendTestRequest($config);
-		} catch (Throwable $err) {
+		} catch (RuntimeException|InvalidArgumentException|JsonException $err) {
 			logError($this->logsEnabled, 'Test webhook request failed: ' . $err->getMessage());
 		}
 	}
