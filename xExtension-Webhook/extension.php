@@ -98,7 +98,7 @@ enum HTTP_METHOD: string {
 		);
 
 		if ($this->shouldSendTestRequest()) {
-			$this->sendTestRequest($config);
+			$this->sendTestRequestSafely($config);
 		}
 	}
 
@@ -404,6 +404,38 @@ enum HTTP_METHOD: string {
 			$config['enable_logging'],
 			'Test request from configuration',
 		);
+	}
+
+	/**
+	 * Keep configuration save path resilient even when test webhook fails.
+	 *
+	 * @param array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * } $config
+	 */
+	private function sendTestRequestSafely(array $config): void {
+		try {
+			$this->sendTestRequest($config);
+		} catch (Throwable $err) {
+			logError($this->logsEnabled, 'Test webhook request failed: ' . $err->getMessage());
+		}
 	}
 
 	/**
