@@ -31,7 +31,7 @@ enum HTTP_METHOD: string {
  * Sends configurable webhook requests whenever new entries match the
  * configured keyword filters.
  *
- * @author Lukas Melega, Ryahn
+ * @author Lukas Melega, Ryahn, onlymykazari
  * @version 0.3.0
  * @since FreshRSS 1.20.0
  */
