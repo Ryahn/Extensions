@@ -32,7 +32,7 @@ enum HTTP_METHOD: string {
  * configured keyword filters.
  *
  * @author Lukas Melega, Ryahn
- * @version 0.2.0
+ * @version 0.3.0
  * @since FreshRSS 1.20.0
  */
 final class WebhookExtension extends Minz_Extension {
@@ -49,6 +49,8 @@ final class WebhookExtension extends Minz_Extension {
 }';
 	private const DEFAULT_METHOD = HTTP_METHOD::POST;
 	private const DEFAULT_BODY_TYPE = BODY_TYPE::JSON;
+	private const MATCH_MODE_BASIC = 'basic';
+	private const MATCH_MODE_ADVANCED = 'advanced';
 	private const JSON_LOG_FLAGS = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
 	private const PLAINTEXT_MAX_LENGTH = 360;
 
@@ -125,13 +127,15 @@ final class WebhookExtension extends Minz_Extension {
 			return $entry;
 		}
 
-		$patterns = $config['keywords'];
-		if ($patterns === []) {
+		if (!$this->hasConfiguredKeywords($config)) {
 			logWarning($this->logsEnabled, 'No keywords defined in Webhook extension settings.');
 			return $entry;
 		}
 
-		$matchLog = $this->findMatchLog($entry, $patterns, $config);
+		$matchLog = $config['match_mode'] === self::MATCH_MODE_ADVANCED
+			? $this->findMatchLogAdvanced($entry, $config)
+			: $this->findMatchLogBasic($entry, $config);
+
 		if ($matchLog === null) {
 			return $entry;
 		}
@@ -146,12 +150,16 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	/**
-	 * Try to find a pattern that matches this entry.
+	 * Try to find a pattern that matches this entry in basic mode.
 	 *
-	 * @param array<int, string> $patterns
 	 * @param array<string, mixed> $config
 	 */
-	private function findMatchLog(FreshRSS_Entry $entry, array $patterns, array $config): ?string {
+	private function findMatchLogBasic(FreshRSS_Entry $entry, array $config): ?string {
+		$patterns = $config['keywords'];
+		if ($patterns === []) {
+			return null;
+		}
+
 		$title = (string) $entry->title();
 		$link = (string) $entry->link();
 		$feed = $entry->feed();
@@ -195,6 +203,83 @@ final class WebhookExtension extends Minz_Extension {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Try to find a pattern that matches this entry in advanced mode.
+	 *
+	 * @param array<string, mixed> $config
+	 */
+	private function findMatchLogAdvanced(FreshRSS_Entry $entry, array $config): ?string {
+		$title = (string) $entry->title();
+		$link = (string) $entry->link();
+		$feed = $entry->feed();
+		$feedName = (is_object($feed) && method_exists($feed, 'name')) ? (string) $feed->name() : '';
+		$authors = trim((string) $entry->authors(true));
+		$content = (string) $entry->content();
+
+		$advancedLists = [
+			'title' => $config['keywords_title'] ?? [],
+			'feed' => $config['keywords_feed'] ?? [],
+			'authors' => $config['keywords_authors'] ?? [],
+			'content' => $config['keywords_content'] ?? [],
+		];
+
+		foreach ($advancedLists['title'] as $pattern) {
+			$normalizedPattern = $this->normalizePattern($pattern);
+			if ($normalizedPattern !== null && $this->isPatternFound($normalizedPattern, $title, $pattern)) {
+				return "Matched by title ⮕ pattern: {$pattern} ♦ title: {$title} ♦ link: {$link}";
+			}
+		}
+
+		foreach ($advancedLists['feed'] as $pattern) {
+			$normalizedPattern = $this->normalizePattern($pattern);
+			if (
+				$normalizedPattern !== null
+				&& $feedName !== ''
+				&& $this->isPatternFound($normalizedPattern, $feedName, $pattern)
+			) {
+				return "Matched by feed ⮕ pattern: {$pattern} ♦ feed: {$feedName} ♦ link: {$link}";
+			}
+		}
+
+		foreach ($advancedLists['authors'] as $pattern) {
+			$normalizedPattern = $this->normalizePattern($pattern);
+			if (
+				$normalizedPattern !== null
+				&& $authors !== ''
+				&& $this->isPatternFound($normalizedPattern, $authors, $pattern)
+			) {
+				return "Matched by authors ⮕ pattern: {$pattern} ♦ authors: {$authors} ♦ link: {$link}";
+			}
+		}
+
+		foreach ($advancedLists['content'] as $pattern) {
+			$normalizedPattern = $this->normalizePattern($pattern);
+			if (
+				$normalizedPattern !== null
+				&& $content !== ''
+				&& $this->isPatternFound($normalizedPattern, $content, $pattern)
+			) {
+				return "Matched by content ⮕ pattern: {$pattern} ♦ title: {$title} ♦ link: {$link}";
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * @param array<string, mixed> $config
+	 */
+	private function hasConfiguredKeywords(array $config): bool {
+		if (($config['match_mode'] ?? self::MATCH_MODE_BASIC) === self::MATCH_MODE_ADVANCED) {
+			return ($config['keywords_title'] ?? []) !== []
+				|| ($config['keywords_feed'] ?? []) !== []
+				|| ($config['keywords_authors'] ?? []) !== []
+				|| ($config['keywords_content'] ?? []) !== [];
+		}
+
+		return ($config['keywords'] ?? []) !== [];
 	}
 
 	/**
@@ -305,6 +390,26 @@ final class WebhookExtension extends Minz_Extension {
 			$userConf->_attribute('keywords', []);
 			$needsSave = true;
 		}
+		if ($userConf->attributeString('match_mode') === null) {
+			$userConf->_attribute('match_mode', self::MATCH_MODE_BASIC);
+			$needsSave = true;
+		}
+		if ($userConf->attributeArray('keywords_title') === null) {
+			$userConf->_attribute('keywords_title', []);
+			$needsSave = true;
+		}
+		if ($userConf->attributeArray('keywords_feed') === null) {
+			$userConf->_attribute('keywords_feed', []);
+			$needsSave = true;
+		}
+		if ($userConf->attributeArray('keywords_authors') === null) {
+			$userConf->_attribute('keywords_authors', []);
+			$needsSave = true;
+		}
+		if ($userConf->attributeArray('keywords_content') === null) {
+			$userConf->_attribute('keywords_content', []);
+			$needsSave = true;
+		}
 
 		$needsSave = $this->ensureBoolDefault($userConf, 'search_in_title', true) || $needsSave;
 		$needsSave = $this->ensureBoolDefault($userConf, 'search_in_feed', false) || $needsSave;
@@ -360,6 +465,11 @@ final class WebhookExtension extends Minz_Extension {
 		$needsSave = false;
 		$map = [
 			'keywords' => ['type' => 'array'],
+			'match_mode' => ['type' => 'string'],
+			'keywords_title' => ['type' => 'array'],
+			'keywords_feed' => ['type' => 'array'],
+			'keywords_authors' => ['type' => 'array'],
+			'keywords_content' => ['type' => 'array'],
 			'search_in_title' => ['type' => 'bool'],
 			'search_in_feed' => ['type' => 'bool'],
 			'search_in_authors' => ['type' => 'bool'],
@@ -430,14 +540,27 @@ final class WebhookExtension extends Minz_Extension {
 	 */
 	private function collectConfigurationFromRequest(): array {
 		$keywords = $this->normalizeListInput(Minz_Request::paramTextToArray('keywords'));
+		$keywordsTitle = $this->normalizeListInput(Minz_Request::paramTextToArray('keywords_title'));
+		$keywordsFeed = $this->normalizeListInput(Minz_Request::paramTextToArray('keywords_feed'));
+		$keywordsAuthors = $this->normalizeListInput(Minz_Request::paramTextToArray('keywords_authors'));
+		$keywordsContent = $this->normalizeListInput(Minz_Request::paramTextToArray('keywords_content'));
 		$headers = $this->normalizeListInput(Minz_Request::paramTextToArray('webhook_headers'));
 		$headers = $headers === [] ? self::DEFAULT_HEADERS : $headers;
 
 		$methodValue = HTTP_METHOD::tryFrom(strtoupper(Minz_Request::paramString('webhook_method')));
 		$bodyTypeValue = BODY_TYPE::tryFrom(strtolower(Minz_Request::paramString('webhook_body_type')));
+		$matchMode = Minz_Request::paramString('match_mode');
+		if (!in_array($matchMode, [self::MATCH_MODE_BASIC, self::MATCH_MODE_ADVANCED], true)) {
+			$matchMode = self::MATCH_MODE_BASIC;
+		}
 
 		return [
 			'keywords' => $keywords,
+			'match_mode' => $matchMode,
+			'keywords_title' => $keywordsTitle,
+			'keywords_feed' => $keywordsFeed,
+			'keywords_authors' => $keywordsAuthors,
+			'keywords_content' => $keywordsContent,
 			'search_in_title' => Minz_Request::paramBoolean('search_in_title'),
 			'search_in_feed' => Minz_Request::paramBoolean('search_in_feed'),
 			'search_in_authors' => Minz_Request::paramBoolean('search_in_authors'),
@@ -470,6 +593,11 @@ final class WebhookExtension extends Minz_Extension {
 
 		return [
 			'keywords' => $this->getArrayAttribute($userConf, 'keywords', []),
+			'match_mode' => $this->normalizeMatchMode($userConf->attributeString('match_mode')),
+			'keywords_title' => $this->getArrayAttribute($userConf, 'keywords_title', []),
+			'keywords_feed' => $this->getArrayAttribute($userConf, 'keywords_feed', []),
+			'keywords_authors' => $this->getArrayAttribute($userConf, 'keywords_authors', []),
+			'keywords_content' => $this->getArrayAttribute($userConf, 'keywords_content', []),
 			'search_in_title' => $this->getBoolAttribute($userConf, 'search_in_title', true),
 			'search_in_feed' => $this->getBoolAttribute($userConf, 'search_in_feed', false),
 			'search_in_authors' => $this->getBoolAttribute($userConf, 'search_in_authors', false),
@@ -491,6 +619,14 @@ final class WebhookExtension extends Minz_Extension {
 
 	private function normalizeBodyTypeValue(?string $bodyType): string {
 		return (BODY_TYPE::tryFrom(strtolower((string) $bodyType)) ?? self::DEFAULT_BODY_TYPE)->value;
+	}
+
+	private function normalizeMatchMode(?string $matchMode): string {
+		if ($matchMode === self::MATCH_MODE_ADVANCED) {
+			return self::MATCH_MODE_ADVANCED;
+		}
+
+		return self::MATCH_MODE_BASIC;
 	}
 
 	/**
@@ -664,6 +800,22 @@ final class WebhookExtension extends Minz_Extension {
 		$config = $this->getSnapshot();
 		$keywords = $config['keywords'] ?? [];
 		return implode(PHP_EOL, $keywords);
+	}
+
+	public function getKeywordDataByField(string $field): string {
+		$config = $this->getSnapshot();
+		return match ($field) {
+			'title' => implode(PHP_EOL, $config['keywords_title'] ?? []),
+			'feed' => implode(PHP_EOL, $config['keywords_feed'] ?? []),
+			'authors' => implode(PHP_EOL, $config['keywords_authors'] ?? []),
+			'content' => implode(PHP_EOL, $config['keywords_content'] ?? []),
+			default => '',
+		};
+	}
+
+	public function getMatchMode(): string {
+		$config = $this->getSnapshot();
+		return $config['match_mode'] ?? self::MATCH_MODE_BASIC;
 	}
 
 	public function getWebhookHeaders(): string {
