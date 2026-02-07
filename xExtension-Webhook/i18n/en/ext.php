@@ -23,6 +23,8 @@ return array(
 		'mark_as_read' => 'Mark as read',
 		'mark_as_read_description' => 'Mark the article as read after sending the webhook.',
 		'mark_as_read_label' => 'Mark as read',
+		'ignore_updated' => 'Ignore updated entries',
+		'ignore_updated_description' => 'Skip webhook delivery when FreshRSS updates an existing entry.',
 		'http_body' => 'HTTP Body',
 		'http_body_description' => 'Must be valid <b>JSON</b> or form data (<b>x-www-form-urlencoded</b>)',
 		'http_body_placeholder_summary' => 'You can use special placeholders that will be replaced by the actual values:',
@@ -40,6 +42,8 @@ return array(
 		'webhook_headers' => 'HTTP Headers<br />(one per line)',
 		'http_body_type' => 'HTTP Body type',
 		'more_info' => 'More info:',
-		'more_info_description' => 'When header contains <b><code>Content-type: application/x-www-form-urlencoded</code></b> the keys and values are encoded in key-value tuples separated by "&", with a "=" between the key and the value. Non-alphanumeric characters in both keys and values are URL encoded'
+		'more_info_description' => 'When header contains <b><code>Content-type: application/x-www-form-urlencoded</code></b> the keys and values are encoded in key-value tuples separated by "&", with a "=" between the key and the value. Non-alphanumeric characters in both keys and values are URL encoded',
+		'enable_logging' => 'Enable logging',
+		'enable_logging_description' => 'Write webhook requests and responses to the FreshRSS logs (includes URLs and HTTP status codes).'
 	),
 );

@@ -12,9 +12,11 @@ A powerful FreshRSS extension that automatically sends webhook notifications whe
 - **Multiple HTTP Methods**: Supports GET, POST, PUT, DELETE, PATCH, OPTIONS, and HEAD
 - **Configurable Formats**: Send data as JSON or form-encoded
 - **Template System**: Customizable webhook payloads with placeholders
-- **Comprehensive Logging**: Detailed logging for debugging and monitoring
+- **Update-aware Filters**: Ignore updates to existing entries to avoid duplicate notifications
+- **Comprehensive Logging**: Optional, privacy-aware logging for debugging and monitoring
+- **Test Functionality**: Built-in “Save and send test request” button to verify configuration instantly
+- **Thumbnail Placeholder**: Populate payloads with `__THUMBNAIL_URL__` for embeds and cards
 - **Error Handling**: Robust error handling with graceful fallbacks
-- **Test Functionality**: Built-in test feature to verify webhook configuration
 
 ## 📋 Requirements
 
@@ -51,13 +53,20 @@ your-project-name
 - **Search in Feed**: Match keywords in feed names
 - **Search in Authors**: Match keywords in author names
 - **Search in Content**: Match keywords in article content
+- **Ignore Updated Entries**: Skip webhooks when an existing entry is updated
+- **Mark as Read**: Automatically mark matched entries as read after the webhook is sent
 
 #### Webhook Settings
 
 - **Webhook URL**: Your webhook endpoint URL
-- **HTTP Method**: Choose from GET, POST, PUT, DELETE, etc.
+- **HTTP Method**: Choose from GET, POST, PUT, DELETE, PATCH, OPTIONS, or HEAD
 - **Body Type**: JSON or Form-encoded
 - **Headers**: Custom HTTP headers (one per line)
+
+### Logging & Testing
+
+- **Enable Logging**: Toggle HTTP request/response logging (writes to FreshRSS logs)
+- **Save and Send Test Request**: Saves the configuration and immediately sends a test payload using the provided settings
 
 ### Webhook Body Template
 
@@ -88,6 +97,7 @@ Customize the webhook payload using placeholders:
 | `__DATE_TIMESTAMP__` | Unix timestamp |
 | `__AUTHORS__` | Article authors |
 | `__TAGS__` | Article tags |
+| `__THUMBNAIL_URL__` | First enclosure thumbnail or article thumbnail |
 
 ## 🎯 Use Cases
 

@@ -92,22 +92,17 @@ function sendReq(
  */
 function configureHttpMethod(CurlHandle $ch, string $method): void {
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
 
 	switch ($method) {
 		case 'POST':
 			curl_setopt($ch, CURLOPT_POST, true);
 			break;
-		case 'PUT':
-			curl_setopt($ch, CURLOPT_PUT, true);
-			break;
 		case 'GET':
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+			curl_setopt($ch, CURLOPT_HTTPGET, true);
 			break;
-		case 'DELETE':
-		case 'PATCH':
-		case 'OPTIONS':
 		case 'HEAD':
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+			curl_setopt($ch, CURLOPT_NOBODY, true);
 			break;
 	}
 }
@@ -130,7 +125,7 @@ function configureHttpMethod(CurlHandle $ch, string $method): void {
  * @return string|null Processed body content or null if no body needed
  */
 function processHttpBody(string $body, string $bodyType, string $method, bool $logEnabled): ?string {
-	if (empty($body) || $method === 'GET') {
+	if ($body === '' || $method === 'GET' || $method === 'HEAD') {
 		return null;
 	}
 
@@ -138,7 +133,7 @@ function processHttpBody(string $body, string $bodyType, string $method, bool $l
 		$bodyObject = json_decode($body, true, 256, JSON_THROW_ON_ERROR);
 
 		return match ($bodyType) {
-			'json' => json_encode($bodyObject, JSON_THROW_ON_ERROR),
+			'json' => json_encode($bodyObject, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
 			'form' => http_build_query($bodyObject ?? []),
 			default => throw new InvalidArgumentException("Unsupported body type: {$bodyType}")
 		};
@@ -160,15 +155,36 @@ function processHttpBody(string $body, string $bodyType, string $method, bool $l
  * @return string[] Final array of headers to use
  */
 function configureHeaders(array $headers, string $bodyType): array {
-	if (empty($headers)) {
+	$normalized = [];
+	foreach ($headers as $header) {
+		$trimmed = trim((string) $header);
+		if ($trimmed !== '') {
+			$normalized[] = $trimmed;
+		}
+	}
+
+	if ($normalized === []) {
 		return match ($bodyType) {
 			'form' => ['Content-Type: application/x-www-form-urlencoded'],
-			'json' => ['Content-Type: application/json'],
-			default => []
+			default => ['Content-Type: application/json'],
 		};
 	}
 
-	return $headers;
+	$hasContentType = false;
+	foreach ($normalized as $header) {
+		if (stripos($header, 'content-type:') === 0) {
+			$hasContentType = true;
+			break;
+		}
+	}
+
+	if (!$hasContentType) {
+		$normalized[] = $bodyType === 'form'
+			? 'Content-Type: application/x-www-form-urlencoded'
+			: 'Content-Type: application/json';
+	}
+
+	return $normalized;
 }
 
 /**

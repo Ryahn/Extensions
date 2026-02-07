@@ -63,6 +63,15 @@ declare(strict_types=1);
 				</div>
 			</div>
 
+			<div class="form-group">
+				<label class="group-name" for="ignore_updated"><?= _t('ext.webhook.ignore_updated') ?></label>
+				<div class="group-controls">
+					<input type="checkbox" name="ignore_updated" id="ignore_updated" value="1"
+						<?= FreshRSS_Context::userConf()->attributeBool('ignore_updated') ? 'checked="checked"' : '' ?> />
+					<small><?= _t('ext.webhook.ignore_updated_description') ?></small>
+				</div>
+			</div>
+
 		</details>
 	</fieldset>
 
@@ -78,9 +87,8 @@ declare(strict_types=1);
 				<div class="group-controls">
 					<select id="webhook_method" name="webhook_method">
 						<?php
-						$currentMethod = FreshRSS_Context::userConf()->attributeString('webhook_method') ?? $this->webhook_method->value;
-						$supportedMethods = [HTTP_METHOD::POST, HTTP_METHOD::GET, HTTP_METHOD::PUT];
-						foreach ($supportedMethods as $method): ?>
+						$currentMethod = FreshRSS_Context::userConf()->attributeString('webhook_method') ?? HTTP_METHOD::POST->value;
+						foreach (HTTP_METHOD::cases() as $method): ?>
 							<option value="<?= $method->value ?>" <?= $currentMethod === $method->value ? 'selected' : '' ?>><?= $method->value ?></option>
 						<?php endforeach; ?>
 					</select>
@@ -182,6 +190,15 @@ declare(strict_types=1);
 						</details>
 					</div>
 				</div>
+
+				<div class="form-group">
+					<label class="group-name" for="enable_logging"><?= _t('ext.webhook.enable_logging') ?></label>
+					<div class="group-controls">
+						<input type="checkbox" name="enable_logging" id="enable_logging" value="1"
+							<?= FreshRSS_Context::userConf()->attributeBool('enable_logging') ? 'checked="checked"' : '' ?> />
+						<small><?= _t('ext.webhook.enable_logging_description') ?></small>
+					</div>
+				</div>
 			</details>
 
 		</details>
@@ -192,7 +209,9 @@ declare(strict_types=1);
 		<div class="group-controls">
 			<button type="submit" class="btn btn-important"><?= _t('gen.action.submit') ?></button>
 			<button type="reset" class="btn"><?= _t('gen.action.cancel') ?></button>
-			<button type="menu" class="btn"><?= _t('ext.webhook.save_and_send_test_req') ?></button>
+			<button type="submit" name="test_request" value="1" class="btn">
+				<?= _t('ext.webhook.save_and_send_test_req') ?>
+			</button>
 		</div>
 	</div>
 
