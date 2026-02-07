@@ -18,7 +18,6 @@ declare(strict_types=1);
  *
  * @throws InvalidArgumentException When invalid parameters are provided
  * @throws JsonException When JSON encoding/decoding fails
- * @throws Minz_PermissionDeniedException
  * @throws RuntimeException When cURL operations fail
  *
  * @return void
@@ -33,12 +32,13 @@ function sendReq(
 	string $additionalLog = "",
 ): void {
 	// Validate inputs
-	if (empty($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
+	if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) {
 		throw new InvalidArgumentException("Invalid URL provided: {$url}");
 	}
 
+	$normalizedMethod = strtoupper($method);
 	$allowedMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'];
-	if (!in_array(strtoupper($method), $allowedMethods, true)) {
+	if (!in_array($normalizedMethod, $allowedMethods, true)) {
 		throw new InvalidArgumentException("Invalid HTTP method: {$method}");
 	}
 
@@ -54,20 +54,20 @@ function sendReq(
 
 	try {
 		// Configure HTTP method
-		configureHttpMethod($ch, strtoupper($method));
+		configureHttpMethod($ch, $normalizedMethod);
 
 		// Process and set HTTP body
-		$processedBody = processHttpBody($body, $bodyType, $method, $logEnabled);
-		if ($processedBody !== null && $method !== 'GET') {
-			curl_setopt($ch, CURLOPT_POSTFIELDS, $processedBody);
-		}
+			$processedBody = processHttpBody($body, $bodyType, $normalizedMethod, $logEnabled);
+			if ($processedBody !== null && $normalizedMethod !== 'GET') {
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $processedBody);
+			}
 
 		// Configure headers
 		$finalHeaders = configureHeaders($headers, $bodyType);
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $finalHeaders);
 
 		// Log the request
-		logRequest($logEnabled, $additionalLog, $method, $url, $bodyType, $processedBody, $finalHeaders);
+			logRequest($logEnabled, $additionalLog, $normalizedMethod, $url, $bodyType, $processedBody, $finalHeaders);
 
 		// Execute request
 		executeRequest($ch, $logEnabled);
@@ -86,7 +86,7 @@ function sendReq(
  * Sets the appropriate cURL options based on the HTTP method.
  *
  * @param CurlHandle $ch The cURL handle
- * @param string $method HTTP method in uppercase
+ * @param non-empty-string $method HTTP method in uppercase
  *
  * @return void
  */
@@ -120,8 +120,6 @@ function configureHttpMethod(CurlHandle $ch, string $method): void {
  *
  * @throws JsonException When JSON processing fails
  * @throws InvalidArgumentException When unsupported body type is provided
- * @throws Minz_PermissionDeniedException
- *
  * @return string|null Processed body content or null if no body needed
  */
 function processHttpBody(string $body, string $bodyType, string $method, bool $logEnabled): ?string {
@@ -131,10 +129,11 @@ function processHttpBody(string $body, string $bodyType, string $method, bool $l
 
 	try {
 		$bodyObject = json_decode($body, true, 256, JSON_THROW_ON_ERROR);
+		$formData = is_array($bodyObject) ? $bodyObject : [];
 
 		return match ($bodyType) {
 			'json' => json_encode($bodyObject, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-			'form' => http_build_query($bodyObject ?? []),
+			'form' => http_build_query($formData),
 			default => throw new InvalidArgumentException("Unsupported body type: {$bodyType}")
 		};
 	} catch (JsonException $err) {
@@ -152,7 +151,7 @@ function processHttpBody(string $body, string $bodyType, string $method, bool $l
  * @param string[] $headers Array of custom headers
  * @param string $bodyType Content type ('json' or 'form')
  *
- * @return string[] Final array of headers to use
+ * @return list<string> Final array of headers to use
  */
 function configureHeaders(array $headers, string $bodyType): array {
 	$normalized = [];
@@ -201,8 +200,6 @@ function configureHeaders(array $headers, string $bodyType): array {
  * @param string|null $body Processed request body
  * @param string[] $headers Array of HTTP headers
  *
- * @throws Minz_PermissionDeniedException
- *
  * @return void
  */
 function logRequest(
@@ -219,7 +216,7 @@ function logRequest(
 	}
 
 	$cleanUrl = urldecode($url);
-	$cleanBody = $body ? str_replace('\/', '/', $body) : '';
+	$cleanBody = $body !== null ? str_replace('\/', '/', $body) : '';
 	$headersJson = json_encode($headers);
 
 	$logMessage = trim("{$additionalLog} ♦♦ sendReq ⏩ {$method}: {$cleanUrl} ♦♦ {$bodyType} ♦♦ {$cleanBody} ♦♦ {$headersJson}");
@@ -237,7 +234,6 @@ function logRequest(
  * @param bool $logEnabled Whether logging is enabled
  *
  * @throws RuntimeException When cURL execution fails
- * @throws Minz_PermissionDeniedException
  *
  * @return void
  */
@@ -265,13 +261,15 @@ function executeRequest(CurlHandle $ch, bool $logEnabled): void {
  * @param bool $logEnabled Whether logging is enabled
  * @param mixed $data Data to log (will be converted to string)
  *
- * @throws Minz_PermissionDeniedException
- *
  * @return void
  */
-function logWarning(bool $logEnabled, $data): void {
+function logWarning(bool $logEnabled, mixed $data): void {
 	if ($logEnabled && class_exists('Minz_Log')) {
-		Minz_Log::warning("[WEBHOOK] " . $data);
+		try {
+			Minz_Log::warning('[WEBHOOK] ' . toLogString($data));
+		} catch (Throwable) {
+			return;
+		}
 	}
 }
 
@@ -284,13 +282,15 @@ function logWarning(bool $logEnabled, $data): void {
  * @param bool $logEnabled Whether logging is enabled
  * @param mixed $data Data to log (will be converted to string)
  *
- * @throws Minz_PermissionDeniedException
- *
  * @return void
  */
-function logError(bool $logEnabled, $data): void {
+function logError(bool $logEnabled, mixed $data): void {
 	if ($logEnabled && class_exists('Minz_Log')) {
-		Minz_Log::error("[WEBHOOK]❌ " . $data);
+		try {
+			Minz_Log::error('[WEBHOOK]❌ ' . toLogString($data));
+		} catch (Throwable) {
+			return;
+		}
 	}
 }
 
@@ -301,11 +301,9 @@ function logError(bool $logEnabled, $data): void {
  * @param bool $logEnabled Whether logging is enabled
  * @param mixed $data Data to log
  *
- * @throws Minz_PermissionDeniedException
- *
  * @return void
  */
-function LOG_WARN(bool $logEnabled, $data): void {
+function LOG_WARN(bool $logEnabled, mixed $data): void {
 	logWarning($logEnabled, $data);
 }
 
@@ -316,10 +314,26 @@ function LOG_WARN(bool $logEnabled, $data): void {
  * @param bool $logEnabled Whether logging is enabled
  * @param mixed $data Data to log
  *
- * @throws Minz_PermissionDeniedException
- *
  * @return void
  */
-function LOG_ERR(bool $logEnabled, $data): void {
+function LOG_ERR(bool $logEnabled, mixed $data): void {
 	logError($logEnabled, $data);
+}
+
+function toLogString(mixed $data): string {
+	if ($data === null) {
+		return '';
+	}
+	if (is_scalar($data)) {
+		return (string) $data;
+	}
+	if ($data instanceof DateTimeInterface) {
+		return $data->format(DateTimeInterface::ATOM);
+	}
+	if (is_object($data) && method_exists($data, '__toString')) {
+		return (string) $data;
+	}
+
+	$encoded = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+	return is_string($encoded) ? $encoded : '[unserializable]';
 }

@@ -35,9 +35,10 @@ enum HTTP_METHOD: string {
  * @version 0.3.0
  * @since FreshRSS 1.20.0
  */
-final class WebhookExtension extends Minz_Extension {
-	private const DEFAULT_URL = 'http://<WRITE YOUR URL HERE>';
-	private const DEFAULT_HEADERS = [
+	final class WebhookExtension extends Minz_Extension {
+		private const DEFAULT_URL = 'http://<WRITE YOUR URL HERE>';
+		/** @var list<string> */
+		private const DEFAULT_HEADERS = [
 		'User-Agent: FreshRSS',
 		'Content-Type: application/json',
 	];
@@ -63,6 +64,9 @@ final class WebhookExtension extends Minz_Extension {
 		$this->registerHook('entry_before_insert', [$this, 'processArticle']);
 	}
 
+	/**
+	 * @throws Minz_PermissionDeniedException
+	 */
 	#[\Override]
 	public function handleConfigureAction(): void {
 		$this->registerTranslates();
@@ -84,7 +88,7 @@ final class WebhookExtension extends Minz_Extension {
 
 		$userConf->save();
 
-		$this->logsEnabled = (bool) ($config['enable_logging'] ?? false);
+		$this->logsEnabled = $config['enable_logging'];
 
 		$loggable = $config;
 		$loggable['webhook_body'] = '[redacted]';
@@ -94,24 +98,14 @@ final class WebhookExtension extends Minz_Extension {
 		);
 
 		if ($this->shouldSendTestRequest()) {
-			try {
-				$this->sendTestRequest($config);
-			} catch (Throwable $err) {
-				logError($this->logsEnabled, 'Test webhook request failed: ' . $err->getMessage());
-			}
+			$this->sendTestRequest($config);
 		}
 	}
 
 	/**
 	 * Process article and send webhook if patterns match.
-	 *
-	 * @param FreshRSS_Entry|mixed $entry
 	 */
-	public function processArticle($entry): FreshRSS_Entry {
-		if (!$entry instanceof FreshRSS_Entry) {
-			return $entry;
-		}
-
+	public function processArticle(FreshRSS_Entry $entry): FreshRSS_Entry {
 		$config = $this->getSnapshot();
 		if ($config === null) {
 			return $entry;
@@ -152,7 +146,26 @@ final class WebhookExtension extends Minz_Extension {
 	/**
 	 * Try to find a pattern that matches this entry in basic mode.
 	 *
-	 * @param array<string, mixed> $config
+	 * @param array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * } $config
 	 */
 	private function findMatchLogBasic(FreshRSS_Entry $entry, array $config): ?string {
 		$patterns = $config['keywords'];
@@ -160,12 +173,12 @@ final class WebhookExtension extends Minz_Extension {
 			return null;
 		}
 
-		$title = (string) $entry->title();
-		$link = (string) $entry->link();
+		$title = $entry->title();
+		$link = $entry->link();
 		$feed = $entry->feed();
-		$feedName = (is_object($feed) && method_exists($feed, 'name')) ? (string) $feed->name() : '';
-		$authors = trim((string) $entry->authors(true));
-		$content = (string) $entry->content();
+		$feedName = $feed instanceof FreshRSS_Feed ? $feed->name() : '';
+		$authors = trim($entry->authors(true));
+		$content = $entry->content();
 
 		foreach ($patterns as $pattern) {
 			$normalizedPattern = $this->normalizePattern($pattern);
@@ -208,31 +221,43 @@ final class WebhookExtension extends Minz_Extension {
 	/**
 	 * Try to find a pattern that matches this entry in advanced mode.
 	 *
-	 * @param array<string, mixed> $config
+	 * @param array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * } $config
 	 */
 	private function findMatchLogAdvanced(FreshRSS_Entry $entry, array $config): ?string {
-		$title = (string) $entry->title();
-		$link = (string) $entry->link();
+		$title = $entry->title();
+		$link = $entry->link();
 		$feed = $entry->feed();
-		$feedName = (is_object($feed) && method_exists($feed, 'name')) ? (string) $feed->name() : '';
-		$authors = trim((string) $entry->authors(true));
-		$content = (string) $entry->content();
+		$feedName = $feed instanceof FreshRSS_Feed ? $feed->name() : '';
+		$authors = trim($entry->authors(true));
+		$content = $entry->content();
 
-		$advancedLists = [
-			'title' => $config['keywords_title'] ?? [],
-			'feed' => $config['keywords_feed'] ?? [],
-			'authors' => $config['keywords_authors'] ?? [],
-			'content' => $config['keywords_content'] ?? [],
-		];
-
-		foreach ($advancedLists['title'] as $pattern) {
+		foreach ($config['keywords_title'] as $pattern) {
 			$normalizedPattern = $this->normalizePattern($pattern);
 			if ($normalizedPattern !== null && $this->isPatternFound($normalizedPattern, $title, $pattern)) {
 				return "Matched by title ⮕ pattern: {$pattern} ♦ title: {$title} ♦ link: {$link}";
 			}
 		}
 
-		foreach ($advancedLists['feed'] as $pattern) {
+		foreach ($config['keywords_feed'] as $pattern) {
 			$normalizedPattern = $this->normalizePattern($pattern);
 			if (
 				$normalizedPattern !== null
@@ -243,7 +268,7 @@ final class WebhookExtension extends Minz_Extension {
 			}
 		}
 
-		foreach ($advancedLists['authors'] as $pattern) {
+		foreach ($config['keywords_authors'] as $pattern) {
 			$normalizedPattern = $this->normalizePattern($pattern);
 			if (
 				$normalizedPattern !== null
@@ -254,7 +279,7 @@ final class WebhookExtension extends Minz_Extension {
 			}
 		}
 
-		foreach ($advancedLists['content'] as $pattern) {
+		foreach ($config['keywords_content'] as $pattern) {
 			$normalizedPattern = $this->normalizePattern($pattern);
 			if (
 				$normalizedPattern !== null
@@ -269,40 +294,78 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	/**
-	 * @param array<string, mixed> $config
+	 * @param array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * } $config
 	 */
 	private function hasConfiguredKeywords(array $config): bool {
-		if (($config['match_mode'] ?? self::MATCH_MODE_BASIC) === self::MATCH_MODE_ADVANCED) {
-			return ($config['keywords_title'] ?? []) !== []
-				|| ($config['keywords_feed'] ?? []) !== []
-				|| ($config['keywords_authors'] ?? []) !== []
-				|| ($config['keywords_content'] ?? []) !== [];
+		if ($config['match_mode'] === self::MATCH_MODE_ADVANCED) {
+			return $config['keywords_title'] !== []
+				|| $config['keywords_feed'] !== []
+				|| $config['keywords_authors'] !== []
+				|| $config['keywords_content'] !== [];
 		}
 
-		return ($config['keywords'] ?? []) !== [];
+		return $config['keywords'] !== [];
 	}
 
 	/**
 	 * Send article data via webhook.
 	 *
-	 * @param array<string, mixed> $config
+	 * @param array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * } $config
 	 */
 	private function sendArticle(FreshRSS_Entry $entry, string $additionalLog, array $config): void {
 		try {
-			$bodyTemplate = (string) $config['webhook_body'];
+			$bodyTemplate = $config['webhook_body'];
 			$replacements = $this->buildReplacements($entry);
 			$body = str_replace(array_keys($replacements), array_values($replacements), $bodyTemplate);
 
 			sendReq(
-				(string) $config['webhook_url'],
-				(string) $config['webhook_method'],
-				(string) $config['webhook_body_type'],
+				$config['webhook_url'],
+				$config['webhook_method'],
+				$config['webhook_body_type'],
 				$body,
 				$config['webhook_headers'],
-				(bool) $config['enable_logging'],
+				$config['enable_logging'],
 				$additionalLog,
 			);
-		} catch (Throwable $err) {
+		} catch (RuntimeException|InvalidArgumentException|JsonException $err) {
 			logError($this->logsEnabled, 'sendArticle error: ' . $err->getMessage());
 		}
 	}
@@ -310,16 +373,35 @@ final class WebhookExtension extends Minz_Extension {
 	/**
 	 * Send a manual test request using configuration data.
 	 *
-	 * @param array<string, mixed> $config
+	 * @param array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * } $config
 	 */
 	private function sendTestRequest(array $config): void {
 		sendReq(
-			(string) $config['webhook_url'],
-			(string) $config['webhook_method'],
-			(string) $config['webhook_body_type'],
-			(string) $config['webhook_body'],
+			$config['webhook_url'],
+			$config['webhook_method'],
+			$config['webhook_body_type'],
+			$config['webhook_body'],
 			$config['webhook_headers'],
-			(bool) $config['enable_logging'],
+			$config['enable_logging'],
 			'Test request from configuration',
 		);
 	}
@@ -331,7 +413,7 @@ final class WebhookExtension extends Minz_Extension {
 	 */
 	private function buildReplacements(FreshRSS_Entry $entry): array {
 		$feed = $entry->feed();
-		$feedName = (is_object($feed) && method_exists($feed, 'name')) ? (string) $feed->name() : '';
+		$feedName = $feed instanceof FreshRSS_Feed ? $feed->name() : '';
 
 		return [
 			'__TITLE__' => $this->toSafeJsonStr($entry->title()),
@@ -360,7 +442,11 @@ final class WebhookExtension extends Minz_Extension {
 		}
 
 		if (is_array($value)) {
-			$value = implode(', ', array_map(static fn ($item): string => (string) $item, $value));
+			$items = [];
+			foreach ($value as $item) {
+				$items[] = $this->normalizeScalarToString($item);
+			}
+			$value = implode(', ', $items);
 		} elseif (is_object($value)) {
 			if (method_exists($value, '__toString')) {
 				$value = (string) $value;
@@ -369,10 +455,27 @@ final class WebhookExtension extends Minz_Extension {
 			}
 		}
 
-		$string = html_entity_decode((string) $value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-		$string = preg_replace('/\s+/u', ' ', $string) ?? '';
+			$string = html_entity_decode($this->normalizeScalarToString($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			$string = preg_replace('/\s+/u', ' ', $string) ?? '';
 
 		return addcslashes(trim($string), "\"\\");
+	}
+
+	private function normalizeScalarToString(mixed $value): string {
+		if ($value === null) {
+			return '';
+		}
+		if (is_scalar($value)) {
+			return (string) $value;
+		}
+		if ($value instanceof DateTimeInterface) {
+			return $value->format(DateTimeInterface::ATOM);
+		}
+		if (is_object($value) && method_exists($value, '__toString')) {
+			return (string) $value;
+		}
+
+		return '';
 	}
 
 	/**
@@ -453,12 +556,8 @@ final class WebhookExtension extends Minz_Extension {
 	 * Attempt to migrate settings stored via the legacy system configuration.
 	 */
 	private function migrateLegacyConfiguration(FreshRSS_UserConfiguration $userConf): bool {
-		if (!method_exists($this, 'getSystemConfiguration')) {
-			return false;
-		}
-
 		$legacy = $this->getSystemConfiguration();
-		if (!is_array($legacy) || $legacy === []) {
+		if ($legacy === []) {
 			return false;
 		}
 
@@ -505,6 +604,7 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	private function hasAttributeValue(FreshRSS_UserConfiguration $userConf, string $key, string $type): bool {
+		/** @var non-empty-string $key */
 		return match ($type) {
 			'array' => $userConf->attributeArray($key) !== null,
 			'bool' => $userConf->attributeBool($key) !== null,
@@ -513,6 +613,7 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	private function ensureBoolDefault(FreshRSS_UserConfiguration $userConf, string $key, bool $default): bool {
+		/** @var non-empty-string $key */
 		if ($userConf->attributeBool($key) === null) {
 			$userConf->_attribute($key, $default);
 			return true;
@@ -536,7 +637,26 @@ final class WebhookExtension extends Minz_Extension {
 	/**
 	 * Collect configuration values from the current request payload.
 	 *
-	 * @return array<string, mixed>
+	 * @return array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * }
 	 */
 	private function collectConfigurationFromRequest(): array {
 		$keywords = $this->normalizeListInput(Minz_Request::paramTextToArray('keywords'));
@@ -583,7 +703,26 @@ final class WebhookExtension extends Minz_Extension {
 	/**
 	 * Return the configuration snapshot for the current user.
 	 *
-	 * @return array<string, mixed>|null
+	 * @return array{
+	 *   keywords: list<string>,
+	 *   match_mode: 'basic'|'advanced',
+	 *   keywords_title: list<string>,
+	 *   keywords_feed: list<string>,
+	 *   keywords_authors: list<string>,
+	 *   keywords_content: list<string>,
+	 *   search_in_title: bool,
+	 *   search_in_feed: bool,
+	 *   search_in_authors: bool,
+	 *   search_in_content: bool,
+	 *   mark_as_read: bool,
+	 *   ignore_updated: bool,
+	 *   webhook_headers: list<string>,
+	 *   webhook_url: string,
+	 *   webhook_method: string,
+	 *   webhook_body: string,
+	 *   webhook_body_type: string,
+	 *   enable_logging: bool
+	 * }|null
 	 */
 	private function getSnapshot(): ?array {
 		$userConf = $this->getUserConf();
@@ -614,13 +753,18 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	private function normalizeMethodValue(?string $method): string {
-		return (HTTP_METHOD::tryFrom(strtoupper((string) $method)) ?? self::DEFAULT_METHOD)->value;
+		$methodValue = $method ?? '';
+		return (HTTP_METHOD::tryFrom(strtoupper($methodValue)) ?? self::DEFAULT_METHOD)->value;
 	}
 
 	private function normalizeBodyTypeValue(?string $bodyType): string {
-		return (BODY_TYPE::tryFrom(strtolower((string) $bodyType)) ?? self::DEFAULT_BODY_TYPE)->value;
+		$bodyTypeValue = $bodyType ?? '';
+		return (BODY_TYPE::tryFrom(strtolower($bodyTypeValue)) ?? self::DEFAULT_BODY_TYPE)->value;
 	}
 
+	/**
+	 * @return 'basic'|'advanced'
+	 */
 	private function normalizeMatchMode(?string $matchMode): string {
 		if ($matchMode === self::MATCH_MODE_ADVANCED) {
 			return self::MATCH_MODE_ADVANCED;
@@ -630,17 +774,19 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	/**
-	 * @return string[]
+	 * @param non-empty-string $key
+	 * @param list<string> $default
+	 * @return list<string>
 	 */
 	private function getArrayAttribute(FreshRSS_UserConfiguration $userConf, string $key, array $default): array {
 		$value = $userConf->attributeArray($key);
-		if (!is_array($value)) {
+		if ($value === null) {
 			return $default;
 		}
 
 		$normalized = [];
 		foreach ($value as $item) {
-			$trimmed = trim((string) $item);
+			$trimmed = trim($this->normalizeScalarToString($item));
 			if ($trimmed !== '') {
 				$normalized[] = $trimmed;
 			}
@@ -649,11 +795,13 @@ final class WebhookExtension extends Minz_Extension {
 		return $normalized;
 	}
 
+	/** @param non-empty-string $key */
 	private function getBoolAttribute(FreshRSS_UserConfiguration $userConf, string $key, bool $default): bool {
 		$value = $userConf->attributeBool($key);
 		return $value ?? $default;
 	}
 
+	/** @param non-empty-string $key */
 	private function getStringAttribute(FreshRSS_UserConfiguration $userConf, string $key, string $default): string {
 		$value = $userConf->attributeString($key);
 		return ($value === null || $value === '') ? $default : $value;
@@ -663,7 +811,7 @@ final class WebhookExtension extends Minz_Extension {
 	 * Normalize a list input (textarea) into trimmed values.
 	 *
 	 * @param array<int|string, string>|null $values
-	 * @return string[]
+	 * @return list<string>
 	 */
 	private function normalizeListInput(?array $values): array {
 		if (!is_array($values)) {
@@ -709,26 +857,20 @@ final class WebhookExtension extends Minz_Extension {
 		}
 
 		$fallbackNeedle = $fallback !== '' ? $fallback : $pattern;
-		return $fallbackNeedle !== '' && str_contains($text, $fallbackNeedle);
+		return str_contains($text, $fallbackNeedle);
 	}
 
 	private function getEntryThumbnail(FreshRSS_Entry $entry): string {
-		if (method_exists($entry, 'thumbnail')) {
-			$thumbnail = $entry->thumbnail();
-			if (is_string($thumbnail) && $thumbnail !== '') {
-				return $thumbnail;
-			}
+		$thumbnail = $entry->thumbnail();
+		if ($thumbnail !== null && $thumbnail['url'] !== '') {
+			return $thumbnail['url'];
 		}
 
-		if (method_exists($entry, 'enclosures')) {
-			$enclosures = $entry->enclosures();
-			if (is_array($enclosures)) {
-				foreach ($enclosures as $enclosure) {
-					$url = $this->extractEnclosureUrl($enclosure);
-					if ($url !== '') {
-						return $url;
-					}
-				}
+		$enclosures = $entry->enclosures();
+		foreach ($enclosures as $enclosure) {
+			$url = $this->extractEnclosureUrl($enclosure);
+			if ($url !== '') {
+				return $url;
 			}
 		}
 
@@ -736,7 +878,7 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	private function getPlainTextContent(FreshRSS_Entry $entry): string {
-		$content = (string) $entry->content();
+		$content = $entry->content();
 		if ($content === '') {
 			return '';
 		}
@@ -765,10 +907,6 @@ final class WebhookExtension extends Minz_Extension {
 	}
 
 	private function extractEnclosureUrl(mixed $enclosure): string {
-		if (!is_object($enclosure)) {
-			return '';
-		}
-
 		$url = $this->getEnclosureValue($enclosure, 'url');
 		if ($url === '') {
 			return '';
@@ -782,15 +920,34 @@ final class WebhookExtension extends Minz_Extension {
 		return '';
 	}
 
-	private function getEnclosureValue(object $enclosure, string $name): string {
-		if (method_exists($enclosure, $name)) {
-			$value = $enclosure->{$name}();
-			return is_string($value) ? $value : (string) $value;
+	private function getEnclosureValue(mixed $enclosure, string $name): string {
+		if (is_array($enclosure)) {
+			if (!array_key_exists($name, $enclosure)) {
+				return '';
+			}
+			return $this->normalizeScalarToString($enclosure[$name]);
 		}
 
-		if (isset($enclosure->{$name})) {
-			$value = $enclosure->{$name};
-			return is_string($value) ? $value : (string) $value;
+		if (!is_object($enclosure)) {
+			return '';
+		}
+
+		if ($name === 'url') {
+			if (method_exists($enclosure, 'get_link')) {
+				return $this->normalizeScalarToString($enclosure->get_link());
+			}
+			if (method_exists($enclosure, 'link')) {
+				return $this->normalizeScalarToString($enclosure->link());
+			}
+		}
+
+		if ($name === 'type') {
+			if (method_exists($enclosure, 'get_type')) {
+				return $this->normalizeScalarToString($enclosure->get_type());
+			}
+			if (method_exists($enclosure, 'type')) {
+				return $this->normalizeScalarToString($enclosure->type());
+			}
 		}
 
 		return '';
@@ -798,52 +955,62 @@ final class WebhookExtension extends Minz_Extension {
 
 	public function getKeywordsData(): string {
 		$config = $this->getSnapshot();
-		$keywords = $config['keywords'] ?? [];
-		return implode(PHP_EOL, $keywords);
+		if ($config === null) {
+			return '';
+		}
+
+		return implode(PHP_EOL, $config['keywords']);
 	}
 
 	public function getKeywordDataByField(string $field): string {
 		$config = $this->getSnapshot();
+		if ($config === null) {
+			return '';
+		}
+
 		return match ($field) {
-			'title' => implode(PHP_EOL, $config['keywords_title'] ?? []),
-			'feed' => implode(PHP_EOL, $config['keywords_feed'] ?? []),
-			'authors' => implode(PHP_EOL, $config['keywords_authors'] ?? []),
-			'content' => implode(PHP_EOL, $config['keywords_content'] ?? []),
+			'title' => implode(PHP_EOL, $config['keywords_title']),
+			'feed' => implode(PHP_EOL, $config['keywords_feed']),
+			'authors' => implode(PHP_EOL, $config['keywords_authors']),
+			'content' => implode(PHP_EOL, $config['keywords_content']),
 			default => '',
 		};
 	}
 
 	public function getMatchMode(): string {
 		$config = $this->getSnapshot();
-		return $config['match_mode'] ?? self::MATCH_MODE_BASIC;
+		return $config === null ? self::MATCH_MODE_BASIC : $config['match_mode'];
 	}
 
 	public function getWebhookHeaders(): string {
 		$config = $this->getSnapshot();
-		$headers = $config['webhook_headers'] ?? self::DEFAULT_HEADERS;
-		return implode(PHP_EOL, $headers);
+		if ($config === null) {
+			return implode(PHP_EOL, self::DEFAULT_HEADERS);
+		}
+
+		return implode(PHP_EOL, $config['webhook_headers']);
 	}
 
 	public function getWebhookUrl(): string {
 		$config = $this->getSnapshot();
-		return $config['webhook_url'] ?? self::DEFAULT_URL;
+		return $config === null ? self::DEFAULT_URL : $config['webhook_url'];
 	}
 
 	public function getWebhookBody(): string {
 		$config = $this->getSnapshot();
-		return $config['webhook_body'] ?? self::DEFAULT_BODY_TEMPLATE;
+		return $config === null ? self::DEFAULT_BODY_TEMPLATE : $config['webhook_body'];
 	}
 
 	public function getWebhookBodyType(): string {
 		$config = $this->getSnapshot();
-		return $config['webhook_body_type'] ?? self::DEFAULT_BODY_TYPE->value;
+		return $config === null ? self::DEFAULT_BODY_TYPE->value : $config['webhook_body_type'];
 	}
 }
 
-function _LOG(bool $logEnabled, $data): void {
+function _LOG(bool $logEnabled, mixed $data): void {
 	logWarning($logEnabled, $data);
 }
 
-function _LOG_ERR(bool $logEnabled, $data): void {
+function _LOG_ERR(bool $logEnabled, mixed $data): void {
 	logError($logEnabled, $data);
 }
