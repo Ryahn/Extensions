@@ -16,6 +16,7 @@ A powerful FreshRSS extension that automatically sends webhook notifications whe
 - **Comprehensive Logging**: Optional, privacy-aware logging for debugging and monitoring
 - **Test Functionality**: Built-in “Save and send test request” button to verify configuration instantly
 - **Thumbnail Placeholder**: Populate payloads with `__THUMBNAIL_URL__` for embeds and cards
+- **Plaintext Content**: Use `__CONTENT_PLAINTEXT__` for trimmed, tag-free notifications
 - **Error Handling**: Robust error handling with graceful fallbacks
 
 ## 📋 Requirements
@@ -93,6 +94,7 @@ Customize the webhook payload using placeholders:
 | `__FEED__` | Feed name |
 | `__URL__` | Article URL |
 | `__CONTENT__` | Article content |
+| `__CONTENT_PLAINTEXT__` | HTML-free excerpt (trimmed to ~360 characters) |
 | `__DATE__` | Publication date |
 | `__DATE_TIMESTAMP__` | Unix timestamp |
 | `__AUTHORS__` | Article authors |

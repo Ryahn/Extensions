@@ -33,6 +33,7 @@ return array(
 		'http_body_placeholder_title_description' => 'Article title',
 		'http_body_placeholder_url_description' => 'HTML-encoded link of the article',
 		'http_body_placeholder_content_description' => 'Content of the article (HTML format)',
+		'http_body_placeholder_plaintext_description' => 'Plaintext excerpt with HTML removed (trimmed for notifications)',
 		'http_body_placeholder_authors_description' => 'Authors of the article',
 		'http_body_placeholder_feed_description' => 'Feed of the article',
 		'http_body_placeholder_tags_description' => 'Article tags (string, separated by " #")',

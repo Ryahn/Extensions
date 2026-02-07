@@ -50,6 +50,7 @@ final class WebhookExtension extends Minz_Extension {
 	private const DEFAULT_METHOD = HTTP_METHOD::POST;
 	private const DEFAULT_BODY_TYPE = BODY_TYPE::JSON;
 	private const JSON_LOG_FLAGS = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
+	private const PLAINTEXT_MAX_LENGTH = 360;
 
 	private bool $logsEnabled = false;
 
@@ -257,6 +258,7 @@ final class WebhookExtension extends Minz_Extension {
 			'__AUTHORS__' => $this->toSafeJsonStr($entry->authors(true)),
 			'__TAGS__' => $this->toSafeJsonStr($entry->tags(true)),
 			'__THUMBNAIL_URL__' => $this->toSafeJsonStr($this->getEntryThumbnail($entry)),
+			'__CONTENT_PLAINTEXT__' => $this->toSafeJsonStr($this->getPlainTextContent($entry)),
 		];
 	}
 
@@ -595,6 +597,35 @@ final class WebhookExtension extends Minz_Extension {
 		}
 
 		return '';
+	}
+
+	private function getPlainTextContent(FreshRSS_Entry $entry): string {
+		$content = (string) $entry->content();
+		if ($content === '') {
+			return '';
+		}
+
+		$text = strip_tags($content);
+		$text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		$text = preg_replace('/\s+/u', ' ', $text) ?? '';
+		$text = trim($text);
+
+		if ($text === '') {
+			return '';
+		}
+
+		if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+			if (mb_strlen($text) > self::PLAINTEXT_MAX_LENGTH) {
+				return rtrim(mb_substr($text, 0, self::PLAINTEXT_MAX_LENGTH - 1)) . '…';
+			}
+			return $text;
+		}
+
+		if (strlen($text) > self::PLAINTEXT_MAX_LENGTH) {
+			return rtrim(substr($text, 0, self::PLAINTEXT_MAX_LENGTH - 1)) . '…';
+		}
+
+		return $text;
 	}
 
 	private function extractEnclosureUrl(mixed $enclosure): string {
