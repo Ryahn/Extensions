@@ -10,8 +10,26 @@ declare(strict_types=1);
 
 	<fieldset>
 		<legend><?= _t('ext.webhook.event_settings') ?> ⚙️</legend>
-		<details open="open">
-			<summary class="stick"><small><?= _t('ext.webhook.show_hide') ?></small></summary>
+			<details open="open">
+				<summary class="stick"><small><?= _t('ext.webhook.show_hide') ?></small></summary>
+
+				<div class="form-group">
+					<label class="group-name" for="match_mode"><?= _t('ext.webhook.match_mode') ?></label>
+					<div class="group-controls">
+						<select name="match_mode" id="match_mode">
+							<option value="basic" <?= $this->getMatchMode() === 'basic' ? 'selected' : '' ?>>
+								<?= _t('ext.webhook.match_mode_basic') ?>
+							</option>
+							<option value="advanced" <?= $this->getMatchMode() === 'advanced' ? 'selected' : '' ?>>
+								<?= _t('ext.webhook.match_mode_advanced') ?>
+							</option>
+						</select>
+						<br />
+						<small><?= _t('ext.webhook.match_mode_description') ?></small>
+					</div>
+				</div>
+
+				<h3><?= _t('ext.webhook.basic_matching') ?></h3>
 
 			<div class="form-group">
 				<label class="group-name" for="keywords"><?= _t('ext.webhook.keywords') ?></label>
@@ -25,8 +43,8 @@ declare(strict_types=1);
 			</div>
 
 			<!-- Search in article's: -->
-			<div class="form-group">
-				<label class="group-name" for="search_in"><?= _t('ext.webhook.search_in') ?></label>
+				<div class="form-group">
+					<label class="group-name" for="search_in"><?= _t('ext.webhook.search_in') ?></label>
 				<div class="group-controls">
 					<table>
 						<tr>
@@ -52,14 +70,54 @@ declare(strict_types=1);
 							</td>
 						</tr>
 					</table>
+					</div>
+				</div>
+
+				<h3><?= _t('ext.webhook.advanced_matching') ?></h3>
+				<small><?= _t('ext.webhook.advanced_matching_description') ?></small>
+
+				<div class="form-group">
+					<label class="group-name" for="keywords_title"><?= _t('ext.webhook.advanced_title') ?></label>
+					<div class="group-controls">
+						<textarea name="keywords_title" id="keywords_title"><?= $this->getKeywordDataByField('title') ?></textarea>
+					</div>
+				</div>
+
+				<div class="form-group">
+					<label class="group-name" for="keywords_feed"><?= _t('ext.webhook.advanced_feed') ?></label>
+					<div class="group-controls">
+						<textarea name="keywords_feed" id="keywords_feed"><?= $this->getKeywordDataByField('feed') ?></textarea>
+					</div>
+				</div>
+
+				<div class="form-group">
+					<label class="group-name" for="keywords_authors"><?= _t('ext.webhook.advanced_authors') ?></label>
+					<div class="group-controls">
+						<textarea name="keywords_authors" id="keywords_authors"><?= $this->getKeywordDataByField('authors') ?></textarea>
+					</div>
+				</div>
+
+				<div class="form-group">
+					<label class="group-name" for="keywords_content"><?= _t('ext.webhook.advanced_content') ?></label>
+					<div class="group-controls">
+						<textarea name="keywords_content" id="keywords_content"><?= $this->getKeywordDataByField('content') ?></textarea>
+					</div>
+				</div>
+
+				<div class="form-group">
+					<label class="group-name" for="mark_as_read"><?= _t('ext.webhook.mark_as_read') ?></label>
+				<div class="group-controls">
+					<input type="checkbox" name="mark_as_read" id="mark_as_read" value="1"
+						<?= FreshRSS_Context::userConf()->attributeBool('mark_as_read') ? 'checked="checked"' : '' ?> />
 				</div>
 			</div>
 
 			<div class="form-group">
-				<label class="group-name" for="mark_as_read"><?= _t('ext.webhook.mark_as_read') ?></label>
+				<label class="group-name" for="ignore_updated"><?= _t('ext.webhook.ignore_updated') ?></label>
 				<div class="group-controls">
-					<input type="checkbox" name="mark_as_read" id="mark_as_read" value="1"
-						<?= FreshRSS_Context::userConf()->attributeBool('mark_as_read') ? 'checked="checked"' : '' ?> />
+					<input type="checkbox" name="ignore_updated" id="ignore_updated" value="1"
+						<?= FreshRSS_Context::userConf()->attributeBool('ignore_updated') ? 'checked="checked"' : '' ?> />
+					<small><?= _t('ext.webhook.ignore_updated_description') ?></small>
 				</div>
 			</div>
 
@@ -78,9 +136,8 @@ declare(strict_types=1);
 				<div class="group-controls">
 					<select id="webhook_method" name="webhook_method">
 						<?php
-						$currentMethod = FreshRSS_Context::userConf()->attributeString('webhook_method') ?? $this->webhook_method->value;
-						$supportedMethods = [HTTP_METHOD::POST, HTTP_METHOD::GET, HTTP_METHOD::PUT];
-						foreach ($supportedMethods as $method): ?>
+						$currentMethod = FreshRSS_Context::userConf()->attributeString('webhook_method') ?? HTTP_METHOD::POST->value;
+						foreach (HTTP_METHOD::cases() as $method): ?>
 							<option value="<?= $method->value ?>" <?= $currentMethod === $method->value ? 'selected' : '' ?>><?= $method->value ?></option>
 						<?php endforeach; ?>
 					</select>
@@ -119,6 +176,10 @@ declare(strict_types=1);
 									<tr>
 										<td><code>__CONTENT__</code></td>
 										<td><?= _t('ext.webhook.http_body_placeholder_content_description') ?></td>
+									</tr>
+									<tr>
+										<td><code>__CONTENT_PLAINTEXT__</code></td>
+										<td><?= _t('ext.webhook.http_body_placeholder_plaintext_description') ?></td>
 									</tr>
 									<tr>
 										<td><code>__DATE__</code></td>
@@ -182,6 +243,15 @@ declare(strict_types=1);
 						</details>
 					</div>
 				</div>
+
+				<div class="form-group">
+					<label class="group-name" for="enable_logging"><?= _t('ext.webhook.enable_logging') ?></label>
+					<div class="group-controls">
+						<input type="checkbox" name="enable_logging" id="enable_logging" value="1"
+							<?= FreshRSS_Context::userConf()->attributeBool('enable_logging') ? 'checked="checked"' : '' ?> />
+						<small><?= _t('ext.webhook.enable_logging_description') ?></small>
+					</div>
+				</div>
 			</details>
 
 		</details>
@@ -192,7 +262,9 @@ declare(strict_types=1);
 		<div class="group-controls">
 			<button type="submit" class="btn btn-important"><?= _t('gen.action.submit') ?></button>
 			<button type="reset" class="btn"><?= _t('gen.action.cancel') ?></button>
-			<button type="menu" class="btn"><?= _t('ext.webhook.save_and_send_test_req') ?></button>
+			<button type="submit" name="test_request" value="1" class="btn">
+				<?= _t('ext.webhook.save_and_send_test_req') ?>
+			</button>
 		</div>
 	</div>
 

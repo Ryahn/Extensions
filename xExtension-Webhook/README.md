@@ -12,9 +12,13 @@ A powerful FreshRSS extension that automatically sends webhook notifications whe
 - **Multiple HTTP Methods**: Supports GET, POST, PUT, DELETE, PATCH, OPTIONS, and HEAD
 - **Configurable Formats**: Send data as JSON or form-encoded
 - **Template System**: Customizable webhook payloads with placeholders
-- **Comprehensive Logging**: Detailed logging for debugging and monitoring
+- **Update-aware Filters**: Ignore updates to existing entries to avoid duplicate notifications
+- **Two Matching Modes**: Keep simple global matching or switch to field-specific advanced matching
+- **Comprehensive Logging**: Optional, privacy-aware logging for debugging and monitoring
+- **Test Functionality**: Built-in “Save and send test request” button to verify configuration instantly
+- **Thumbnail Placeholder**: Populate payloads with `__THUMBNAIL_URL__` for embeds and cards
+- **Plaintext Content**: Use `__CONTENT_PLAINTEXT__` for trimmed, tag-free notifications
 - **Error Handling**: Robust error handling with graceful fallbacks
-- **Test Functionality**: Built-in test feature to verify webhook configuration
 
 ## 📋 Requirements
 
@@ -51,13 +55,25 @@ your-project-name
 - **Search in Feed**: Match keywords in feed names
 - **Search in Authors**: Match keywords in author names
 - **Search in Content**: Match keywords in article content
+- **Ignore Updated Entries**: Skip webhooks when an existing entry is updated
+- **Mark as Read**: Automatically mark matched entries as read after the webhook is sent
+
+#### Matching Modes
+
+- **Basic Matching**: One keyword list, plus shared search scopes (title/feed/authors/content)
+- **Advanced Matching**: Four dedicated keyword lists so each field has its own patterns
 
 #### Webhook Settings
 
 - **Webhook URL**: Your webhook endpoint URL
-- **HTTP Method**: Choose from GET, POST, PUT, DELETE, etc.
+- **HTTP Method**: Choose from GET, POST, PUT, DELETE, PATCH, OPTIONS, or HEAD
 - **Body Type**: JSON or Form-encoded
 - **Headers**: Custom HTTP headers (one per line)
+
+### Logging & Testing
+
+- **Enable Logging**: Toggle HTTP request/response logging (writes to FreshRSS logs)
+- **Save and Send Test Request**: Saves the configuration and immediately sends a test payload using the provided settings
 
 ### Webhook Body Template
 
@@ -84,10 +100,12 @@ Customize the webhook payload using placeholders:
 | `__FEED__` | Feed name |
 | `__URL__` | Article URL |
 | `__CONTENT__` | Article content |
+| `__CONTENT_PLAINTEXT__` | HTML-free excerpt (trimmed to ~360 characters) |
 | `__DATE__` | Publication date |
 | `__DATE_TIMESTAMP__` | Unix timestamp |
 | `__AUTHORS__` | Article authors |
 | `__TAGS__` | Article tags |
+| `__THUMBNAIL_URL__` | First enclosure thumbnail or article thumbnail |
 
 ## 🎯 Use Cases
 
@@ -204,6 +222,20 @@ Enable logging in the extension settings to see detailed information about:
 - Response codes and errors
 
 ## 📝 Changelog
+
+### Version 0.3.0
+
+- Added matching modes: `Basic` (existing behavior) and `Advanced` (field-specific keyword lists)
+- Added advanced keyword groups for title, feed, authors, and content
+- Improved configuration model to support both matching strategies cleanly
+- Updated configuration UI and documentation for the new matching workflow
+
+### Version 0.2.0
+
+- Added `__CONTENT_PLAINTEXT__` placeholder (HTML stripped and length-limited for notifications)
+- Added support for `__THUMBNAIL_URL__` placeholder
+- Improved webhook request handling for headers, methods, and body encoding
+- Added options for "Ignore updated entries" and explicit logging toggle
 
 ### Version 0.1.1
 

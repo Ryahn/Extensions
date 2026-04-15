@@ -1,8 +1,8 @@
 {
 	"name": "Webhook",
-	"author": "Lukas Melega, Ryahn",
+	"author": "Lukas Melega, Ryahn, onlymykazari",
 	"description": "Send custom webhook when new article appears (and matches custom criteria)",
-	"version": "0.1.1",
+	"version": "0.3.0",
 	"entrypoint": "Webhook",
 	"type": "system"
 }
